@@ -1,0 +1,19 @@
+# modules
+node_modules/
+
+# binary
+*.exe
+
+# folders
+package/
+build/
+dist/
+_*/
+
+# macos
+.DS_Store
+
+# secrets
+.env
+.env.*
+!.env.example

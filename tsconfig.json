@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "esModuleInterop": true,
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "module": "ES6",
+    "target": "es6",
+    "moduleResolution": "node",
+    "typeRoots": ["node_modules/@types"]
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"],
+  "ts-node": {
+    "esm": true,
+    "experimentalSpecifierResolution": "node"
+  }
+}

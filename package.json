@@ -1,0 +1,27 @@
+{
+  "name": "jnj-learning-tool-udemy",
+  "version": "0.0.1",
+  "description": "Learning Manager Tool For Udemy By JnJsoft",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "keywords": [],
+  "author": "Moon In Learn <mooninlearn@gmail.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.3.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.4"
+  },
+  "dependencies": {
+    "axios": "^1.4.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.0.3",
+    "puppeteer": "^20.3.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
