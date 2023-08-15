@@ -2,15 +2,24 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "esModuleInterop": true,
     "sourceMap": true,
     "noImplicitAny": false,
     "module": "es2022",
     "target": "es2022",
     "moduleResolution": "node",
+    "esModuleInterop": true,
     "typeRoots": ["node_modules/@types"]
   },
-  "include": ["src/**/*", "_drafts/_udemyApi.ts", "udemyApi.js"],
+  "include": [
+    "src/**/*",
+    "_drafts/_udemyApi.ts",
+    "udemyApi.js",
+    "_backups/_UdemyWeb.ts",
+    "_backups/__UdemyWeb.ts",
+    "_backups/_UdemyData.ts",
+    "_backups/_udemyMarkdown.ts",
+    "_backups/__udemyHtml.ts"
+  ],
   "exclude": ["node_modules"],
   "ts-node": {
     "esm": true,

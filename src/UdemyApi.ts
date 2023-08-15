@@ -46,6 +46,11 @@ const settingsPath = process.env.ENV_SETTINGS_PATH ?? 'C:/JnJ-soft/Developments/
 // &---------------------------------------------------------------------------
 const udemyUserInfo = (nick) => loadJson(`${settingsPath}/Apis/udemy.json`)[nick];
 
+// * url(api)
+const url_api_course_info = (courseId) => `https://www.udemy.com/api-2.0/courses/${courseId}`;
+const url_api_curriculum_items = (courseId) =>
+  `https://www.udemy.com/api-2.0/courses/${courseId}/public-curriculum-items/?page=1&page_size=1000`;
+
 // & Class AREA
 // &---------------------------------------------------------------------------
 class UdemyApi {
@@ -53,28 +58,25 @@ class UdemyApi {
   // userInfo; // ? udemy api user info
   username; // ? udemy api username
   password; // ? udemy api password
-  courseId; // ? udemy courseId
 
   /** class constructor
-   * @param nick - udemy api user nicknick
+   * @param nick - udemy api user nick
    *
    * @example
    *   udemyApi = new UdemyApi('deverlife')
    */
-  constructor(nick: string, courseId: string) {
+  constructor(nick: string) {
     const userInfo = udemyUserInfo(nick);
     this.nick = nick;
     this.username = userInfo.apiUsername;
     this.password = userInfo.apiPassword;
-    this.courseId = courseId;
   }
 
   /** fetchCourseInfo
    */
-  async fetchCourseInfo() {
-    const courseId = this.courseId;
+  async fetchCourseInfo(courseId) {
     try {
-      let response = await axios(`https://www.udemy.com/api-2.0/courses/${courseId}`, {
+      let response = await axios(url_api_course_info(courseId), {
         auth: {
           username: this.username,
           password: this.password
@@ -83,46 +85,57 @@ class UdemyApi {
       if (response.status == 200) {
         return response.data;
       } else {
-        console.log(`## (courseId: ${courseId}) fetchCourseInfoByUdemyApi status != 200`);
+        console.log(`## (courseId: ${courseId}) fetchCourseInfo status != 200`);
         return null;
       }
     } catch (ex) {
-      console.log(`## (courseId: ${courseId}) fetchCourseInfoByUdemyApi ERROR`);
+      console.log(`## (courseId: ${courseId}) fetchCourseInfo ERROR`);
       return null;
     }
   }
 
   /** fetchCourseCurriculum
    */
-  async fetchCourseCurriculum() {
-    const courseId = this.courseId;
+  async fetchCourseCurriculum(courseId) {
     try {
-      let response = await axios(
-        `https://www.udemy.com/api-2.0/courses/${courseId}/public-curriculum-items/?page=1&page_size=1000`,
-        {
-          auth: {
-            username: this.username,
-            password: this.password
-          }
+      let response = await axios(url_api_curriculum_items(courseId), {
+        auth: {
+          username: this.username,
+          password: this.password
         }
-      );
+      });
       if (response.status == 200) {
         return response.data.results;
       } else {
-        console.log(`## (courseId: ${courseId}) fetchCourseCurriculumByUdemyApi status != 200`);
+        console.log(`## (courseId: ${courseId}) fetchCourseCurriculum status != 200`);
         return null;
       }
     } catch (ex) {
-      console.log(`## (courseId: ${courseId}) fetchCourseCurriculumByUdemyApi ERROR`);
+      console.log(`## (courseId: ${courseId}) fetchCourseCurriculum ERROR`);
       return null;
     }
   }
 }
 
+// & Instance / (Method) Function
+// &---------------------------------------------------------------------------
+const udemyApi = (nick) => new UdemyApi(nick);
+
+/** fetchCourseCurriculum
+ */
+const fetchCourseInfo = async (courseId) => await udemyApi('deverlife').fetchCourseInfo(courseId);
+
+/** fetchCourseCurriculum
+ */
+const fetchCourseCurriculum = async (courseId) =>
+  await udemyApi('deverlife').fetchCourseCurriculum(courseId);
+
 // & Export AREA
 // &---------------------------------------------------------------------------
 export {
-  UdemyApi // udemy config
+  UdemyApi, // [class] UdemyApi
+  fetchCourseInfo, // [function async]
+  fetchCourseCurriculum // [function async]
 };
 
 // & Test AREA
