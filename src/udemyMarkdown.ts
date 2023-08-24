@@ -52,6 +52,7 @@ import {
   // ? json(curriculum)
   json_curriculum_api, // curriculum(from web(courseDetail))
   json_curriculum_web2, // curriculum(from web(curriculum))
+  json_curriculum_lectures, // curriculum lectrue(active + draft)
 
   // ? folder(course)
   folder_courses_handouts, // Resource(수업 자료) 다운로드 파일 폴더
@@ -69,41 +70,17 @@ import { courseIdByCourseTitle } from './udemyData';
 //     # punc = r'[\\/:*?"<>|]'  ## NOTE: 파일이름에 사용할 수 없는 문자
 //     punc = '[ !"#$%&\'()*+,-./:;<=>?[\]^_`{|}~“”·]' if level == 0 else '[ "#$%&\'*+,/:;=?[\]^`{|}~]' if level == 1 else r'[\\/:*?"<>|]'
 //     return re.sub(punc, '_', name)
-const fix_filename = (name) => {
+const fixFileName = (name) => {
   return name.replace(/[ !"#$%&\'()*+,-./:;<=>?[\]^_`{|}~“”·]/g, '_');
 };
 
-/** findChaptersByCourseId
- * Find Chapters By CourseId
- * TODO: 강의 시간 등(Web html curriculum 참조) 추가
- * TODO: ``
+/** markdownFromHtmlStr
+ * Markdown From Html String
+ *
  */
-const findChaptersByCourseId = (courseId, save = true) => {
-  // const course = loadJson(`_files/json/curriculum/api/${courseId}.json`);
-  const course = loadJson(json_curriculum_api(courseId));
-  let chapters = [];
-  for (let lecture of course) {
-    if (lecture._class == 'chapter') {
-      chapters.push({ chapterId: lecture.id, title: lecture.title, lectures: [], quizes: [] });
-    } else if (lecture._class == 'lecture') {
-      // chapters[chapters.length - 1]['lectures'].push(lecture);
-      // chapters[chapters.length - 1]['lectures'].push({lectureId: lecture.id, title: lecture.title, title_cleaned: lecture.title_cleaned});
-      chapters[chapters.length - 1]['lectures'].push({
-        lectureId: lecture.id,
-        title: lecture.title
-      });
-    } else if (lecture._class == 'quiz') {
-      // chapters[chapters.length - 1]['quizes'].push(lecture);
-      console.log("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@It's Quiz!");
-      chapters[chapters.length - 1]['quizes'].push({ lectureId: lecture.id, title: lecture.title });
-    }
-  }
-
-  if (save) {
-    saveJson(`_files/json/chapters/${courseId}.json`, chapters);
-  }
-
-  return chapters;
+const markdownFromHtmlStr = (html) => {
+  const turndownService = new TurndownService({ headingStyle: 'atx' });
+  return turndownService.turndown(html);
 };
 
 /** markdownFromHtmlFile
@@ -130,63 +107,70 @@ const chapterMarkdowns = (title, lang = '한국') => {
   // const courseId = '2887266';
   // const courseId = '3227583';
   const courseId = courseIdByCourseTitle(title);
-  const chapters = findChaptersByCourseId(courseId); // TODO: save 자동 설정
-  // for (let chapter of chapters) {
-  for (let i = 0; i < chapters.length; i++) {
-    const chapter = chapters[i];
-    const prefix = (i + 1).toString().padStart(3, '0'); // 일련번호
-    let markdown = `# ${chapter.title}\n\n`;
-    for (let lecture of chapter.lectures) {
-      let lectureId = lecture.lectureId;
-      // console.log(`lectureId: ${lectureId}`);
-      markdown += `## [${lecture.title}](https://www.udemy.com/course/${title}/learn/lecture/${lectureId})\n\n`;
+  // const chapters = findChaptersByCourseId(courseId); // TODO: save 자동 설정
+  const lectures = loadJson(json_curriculum_lectures(courseId));
 
-      // ? transcript
-      let _markdown = markdownFromHtmlFile(
-        `_files/courses/${title}/transcript/html/${langTag}/${lectureId}.html`
-      );
+  let markdown = '';
+  let count = 0;
+  let chapterNum = 0;
+  let lectureNum = 1;
+  let prefix = '';
+  for (let i = 0; i < lectures.length; i++) {
+    const lecture = lectures[i];
+    const lectureId = lecture.lectureId;
+    // const firstLectureIndexes = lectures.find((lecture) => lecture['lectureNoe'] == 1)
+    if (lecture.lectureNo == 1) {
+      // 첫번째 lecture인 경우
+      chapterNum += 1;
+      prefix = chapterNum.toString().padStart(3, '0'); // 일련번호
+      let lectures_ = lectures.filter((lect) => lect['chapterNo'] == lecture.chapterNo);
+      lectureNum = lectures_.length;
+      // console.log(`lectureNum: ${lectureNum}`);
+      count = 0;
+      markdown = `# ${lecture.chapterTitle ?? ''}\n\n`;
+    }
+    count += 1;
+    markdown += `## [${lecture.lectureTitle}](https://www.udemy.com/course/${title}/learn/lecture/${lectureId})\n`;
+    markdown += `- Duration: ${lecture.duration ?? '00:00'}\n`;
+    markdown += `- Description: ${markdownFromHtmlStr(lecture.description) ?? ''}\n\n`;
 
-      if (_markdown.length < 2) {
-        // ?transcript(대본)가 없는 경우는 content(내용)
-        _markdown = markdownFromHtmlFile(`_files/courses/${title}/content/${lectureId}.html`);
-      }
+    // ? transcript
+    let transcript = markdownFromHtmlFile(
+      `_files/courses/${title}/transcript/html/${langTag}/${lectureId}.html`
+    );
 
-      if (_markdown.length > 2) {
-        markdown += _markdown.replaceAll('\n\n', '\n') + '\n\n\n';
+    if (transcript.length > 2) {
+      // ? transcript대본이 있는 경우
+      markdown += `- Transcript:\n${transcript.replaceAll('\n\n', '\n') + '\n\n\n'}`;
+    } else {
+      let content = markdownFromHtmlFile(`_files/courses/${title}/content/${lectureId}.html`);
+      if (content.length > 2) {
+        // ? content내용이 있는 경우
+        markdown += `- Content:\n${content.replaceAll('\n\n', '\n') + '\n\n\n'}`;
       } else {
         // ? 대본/내용이 없는 경우
         markdown += '__EMPTY__\n\n\n';
       }
     }
-    saveFile(
-      `_files/courses/${title}/markdown/_backups/${langTag}/${prefix}_${fix_filename(
-        chapter.title
-      )}.md`,
-      // `_files/courses/${title}/markdown/_backups/${langTag}/${prefix}_${fix_filename(chapter.title)}_${
-      //   chapter.chapterId
-      // }.md`,
-      markdown
-    );
-    saveFile(
-      `_files/courses/${title}/markdown/notes/${langTag}/${prefix}_${fix_filename(
-        chapter.title
-      )}.md`,
-      markdown
-    );
-    // saveFile(`_files/courses/transcript/markdown/${langTag}/${chapter.title}.md`, markdown);  // TODO: title에 있는 파일이름 금지 문자 치환
-  }
 
-  // {
-  //   "lectureId": 19734534,
-  //   "title": "Initial Setup"
-  // },
-  // return turndownService.turndown(loadFile(path));
+    // ? 마지막 lecture
+    // console.log(`${count} / ${lectureNum}`);
+    if (count == lectureNum) {
+      // console.log(`save File ${lecture.chapterTitle} ${lectureId}`);
+      saveFile(
+        `_files/courses/${title}/markdown/notes/${langTag}/${prefix}_${fixFileName(
+          lecture.chapterTitle
+        )}.md`,
+        markdown
+      );
+    }
+  }
 };
 
 // & Export AREA
 // &---------------------------------------------------------------------------
 export {
-  findChaptersByCourseId, // Find Chapters By CourseId
+  markdownFromHtmlStr, // Markdown From Html String
   markdownFromHtmlFile, //
   chapterMarkdowns // create chapter markdown files for course(by title)
 };

@@ -1,0 +1,1 @@
+pocketbase.exe serve --dir="backend/pocketbase/sqlite" --http="127.0.0.1:8091"

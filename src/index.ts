@@ -10,8 +10,11 @@
  *   [ ] addCourse
  *   [ ] updateCourse
  *
+ * Notes:
+ *  - '830234' CSS 와 JavaScript 꼭 필요한 것만 빠르게 정리하기 => 강좌 페이지 없음
+ *
  * Usages
- *   - `jnj-learning-tool-udemy> yarn dev`
+ *   - `jnj-learning-tool-udemy$ yarn dev`
  *
  * Requirements
  *   - Create `udemy` web account(Register at `udemy.com`)
@@ -24,7 +27,11 @@
  *   - JnJsoft Ko <jnjsoft.ko@gmail.com>
  */
 
+import _ from 'lodash';
+
 import { loadJson, findFiles, sleep } from 'jnj-lib-base';
+
+import {} from 'jnj-lib-google';
 
 // ? Local Modules
 import {
@@ -50,6 +57,8 @@ import {
   purchaseHistory,
   courseDetails,
   curriculums,
+  // lectureIdsFromWeb, //  [function async] fetch & save course lectureIds 강좌 강의실 페이지
+  lectureIds, //  [function async] fetch & save course lectureIds 강좌 강의실 페이지
   transcripts, // [function async] fetch & save course lectures 강의 대본(강의실 페이지)
   handouts
 } from './UdemyWeb';
@@ -59,7 +68,7 @@ import {
   courseInfoFromCourseDetail, // Extract CourseInfo Json From CourseDetail Html File
   curriculumFromCourseDetail, // Extract Curriculum Json From CourseDetail Html File
   curriculumFromCurriculum, // Extract Curriculum Json From Curriculum Html File
-  handoutsFromCurriculum, // Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
+  handoutListFromCurriculum, // Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
   purchaseHistoryFromPurchaseHistory // 구매 이력
 } from './udemyHtml';
 
@@ -71,16 +80,31 @@ import {
   findActiveCourseTitles, // Find Active Courses Titles
   findAllCourseTitles, // Find All Course Titles
   findCourseLectureIds,
+  findAllLectureIds, // findAllLectureIds for course(Id) (by json_curriculum_lectures)
   saveDraftCourseIds, // Save Draft CourseIds(Draft(보관함)으로 이동된 강좌)
   saveActiveCourseList, // Save Active CourseList
   saveCourseTitles, // Save (active) Course Titles
   saveCoursesMap,
   saveAllCourseInfos,
   saveCurriculumsByApi,
-  saveAllCurriculumsByApi
+  saveAllCurriculumsByApi,
+  saveAllMixCourseInfos, // Save All Mix CourseInfo
+  saveMixActiveCurriculums, // Save Mix Active Curriculums(given courseIds)
+  saveAllMixCurriculums, // Save All Mix Curriculums(active course + draft course)
+  saveAllLectures, // Save All Lectures(active course + draft course)
+  saveTrascriptCount, // Save Trascript Count For All Courses(active course + draft course)
+  saveContentCount, // Save Content Count For All Courses(active course + draft course)
+  saveHandoutCount, // Save Handout Count(fileNum, downloadedNum) For All Courses(active course + draft course)
+  saveAllInstructorInfos // Save All Instructor Infos(active course 강사 정보)
 } from './udemyData';
 
-import { findChaptersByCourseId, markdownFromHtmlFile, chapterMarkdowns } from './udemyMarkdown';
+import {
+  markdownFromHtmlStr, // Markdown From Html String
+  markdownFromHtmlFile, //
+  chapterMarkdowns // create chapter markdown files for course(by title)
+} from './udemyMarkdown';
+
+// import { createCollectionsBySheet } from './udemyPocketbase';
 
 // & Function AREA
 // &---------------------------------------------------------------------------
@@ -126,6 +150,12 @@ const initUdemy = async (nick) => {
   console.log('saveCoursesMap');
   console.log('========================================================');
 
+  // & InstructorInfo
+  // * Extract InstructorInfo Json From CourseInfo(Api) Json File
+  saveAllInstructorInfos();
+  console.log(' saveAllInstructorInfos');
+  console.log('========================================================');
+
   // & PurchaseHistory
   // * [UdemyWeb] Scrape & Save PurchaseHistory Htmls From udemy.com(web)
   await purchaseHistory(nick);
@@ -168,6 +198,11 @@ const initUdemy = async (nick) => {
   console.log('curriculumFromCourseDetail');
   console.log('-------------------------------------------------------');
 
+  // * Save LectureIds(draft course)
+  lectureIds(nick, loadJson(json_list_courseIds_draft));
+  console.log('lectureIds');
+  console.log('==========================================================');
+
   // * Extract Curriculum Json From Curriculum Html File
   for (let title of findAllCourseTitles()) {
     curriculumFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
@@ -175,12 +210,27 @@ const initUdemy = async (nick) => {
   console.log('curriculumFromCurriculum');
   console.log('==========================================================');
 
+  // * Save Updated CourseInfos by Mix(basic + api + web)
+  saveAllMixCourseInfos(); // Save All Mix CourseInfo
+  console.log('saveAllMixCourseInfos');
+  console.log('-------------------------------------------------------');
+
+  // * Save Updated Curriculums by Mix(api + web / draft course 포함)
+  saveAllMixCurriculums(); // Save All Mix Curriculums(active course + draft course)
+  console.log('saveAllMixCurriculums');
+  console.log('==========================================================');
+
+  // * Save Curriculum Lecutures by Mix
+  saveAllLectures(); // Save All Mix Curriculums(active course + draft course)
+  console.log('saveAllLectures');
+  console.log('==========================================================');
+
   // & Handouts(수업자료)
   // * Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
   for (let title of findAllCourseTitles()) {
-    handoutsFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
+    handoutListFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
   }
-  console.log('handoutsFromCurriculum');
+  console.log('handoutListFromCurriculum');
   console.log('-------------------------------------------------------');
 
   // * [UdemyWeb] Download Handouts From udemy.com(web)
@@ -205,132 +255,150 @@ const initUdemy = async (nick) => {
 // & Test AREA
 // &---------------------------------------------------------------------------
 const nick = 'deverlife';
+// const title = 'java-tutorial';
+// const lectureIds = ['152283', '224058', '625296', '32284256'];
+// const lang = '영어';
+// transcripts(nick, title, lectureIds, lang);
+
+// '830234' CSS 와 JavaScript 꼭 필요한 것만 빠르게 정리하기 => 강좌 페이지 없음
+// await curriculums(nick, _.difference(loadJson(json_list_courseIds_draft), ['830234']));
+// for (let title of _.difference(loadJson(json_list_courseIds_draft), ['830234'])) {
+//   curriculumFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
+// }
+// console.log(loadJson(json_list_courseIds_draft));
+// lectureIds(nick, loadJson(json_list_courseIds_draft));
+// lectureIds(nick, [
+//   '1289478',
+//   '1329956',
+//   '1389030',
+//   '1425316',
+//   '1499558',
+//   '1528664',
+//   '1585360',
+//   '1618212',
+// ]);
+// lectureIds(nick, ['1620468', '830234']);
+
+// saveAllMixCurriculums();
+// saveAllLectures();
+
+// // microservices-with-node-js-and-react
+// await curriculums(nick, ['microservices-with-node-js-and-react']);  // 2887266
+
+// handoutListFromCurriculum('unity-master-video-game-development-the-complete-course');
+
+// for (let title of findAllCourseTitles()) {
+//   handoutListFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
+// }
+
+// saveAllMixCourseInfos();
+// saveTrascriptCount();
+// saveContentCount(); // Save Content Count For All Courses(active course + draft course)
+// saveHandoutCount(); // Save Handout Count(fileNum, downloadedNum) For All Courses(active course + draft course)
+// saveAllLectures();
+// handouts('build-a-blockchain-cryptocurrency-using-python')
+// const title = 'build-a-blockchain-cryptocurrency-using-python';
+
+// // const title = '1272576';
+// const title = 'microservices-with-node-js-and-react';
+// handouts({ nick, title });
+
+// for (let title of findAllCourseTitles()) {
+//   curriculumFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
+// }
+
+// saveAllMixCourseInfos(); // Save All Mix CourseInfo
+// saveAllMixCurriculums(); // Save All Mix Curriculums(active course + draft course)
 
 // // & init Udemy
 // await initUdemy(nick);
+// ? 완료
+// svelte-and-sveltekit
+// web-design-figma-webflow-freelancing
+// learn-flutter-dart-to-build-ios-android-apps
+// complete-web-designer-mobile-designer-zero-to-mastery
+// backend-master-class-golang-postgresql-kubernetes: english
+// microservices-with-node-js-and-react
+// nodejs-mvc-rest-apis-graphql-deno
+// best-100-days-python
+// time-series-analysis-in-python: english
+// react-the-complete-guide-incl-redux
+// algorithmic-trading-with-python-and-machine-learning: englsh
+// keras-deep-learning: english
+// java-for-complete-beginers-programming-fundamentals: english
+// java-tutorial
+// the-beginners-guide-to-the-stock-market
+// cryptocurrency-complete-bitcoin-ethereum-course
 
-// purchaseHistory(nick);
+// & Transcripts
+// const title = 'data-science-and-machine-learning-bootcamp-with-r';
+// const title = 'microservices-with-node-js-and-react';
+const title = '1289478'; // iOS 11 & Swift 4 - The Complete iOS App Development Bootcamp
+// const title = 'java-tutorial';
+const courseId = courseIdByCourseTitle(title);
+console.log(courseId);
+// how-to-learn-english-and-more-on-your-own-using-the-internet
+//
+// complete-python-bootcamp
+// complete-android-n-developer-course
+// bitcoin-ethereum-blockchain
 
-// purchaseHistoryFromPurchaseHistory();
-
-// for (let title of findDraftCourseIds()) {
-//   handoutsFromCurriculum(title); // Extract CourseInfo Json From CourseDetail Html File
-// }
-
-// curriculums(nick, ['360920', '30-days-of-python']);
-
-// console.log(courseIdByCourseTitle('30-days-of-python'));
-
-// // const draftIds = loadJson(json_list_courseIds_draft);
-// const draftIds = ['3090254'];
-// curriculums_draft(nick, draftIds);
-
-// const titles = ['360920', '30-days-of-python'];
-// for (let title of titles) {
-//   curriculumFromCurriculum(title);
-// }
-
-// // & UdemyApi
-// // console.log(UDEMY_API_USERNAME, UDEMY_API_PASSWORD);
-// const udemyApi = new UdemyApi(nick);
-// console.log(udemyApi.username);
-// const courseId = '1010586'; // ? Become a WordPress Developer: Unlocking Power With Code
-// // const data = await fetchCourseInfo(courseId);
-// const data = await udemyApi.fetchCourseCurriculum(courseId);
-
-// console.log(data);
-
-// // & UdemyWeb
-// // ? courseList
-// await courseList(nick, false);
-
-// // ? purchaseHistory
-// await purchaseHistory(nick, false);
-
-// // ? courseDetails
-// const titles = [
-//   'visual-paradigm-essential',
-//   'become-an-android-developer-from-scratch',
-//   'web-design-figma-webflow-freelancing'
-// ];
-// // const titles = findActiveCourseTitles();
-// await courseDetails(nick, titles);
-
-// ? curriculums
-// await curriculums(nick, titles);
-
-// // ? transcripts
-const langs = ['한국', '영어'];
-// const title = 'complete-web-designer-mobile-designer-zero-to-mastery';
-// const title = 'svelte-and-sveltekit';
 // const courseId = courseIdByCourseTitle(title);
-// const lectureIds = findCourseLectureIds(courseId);
-// // * 전체 lectures(lecture(자막) / execise(내용) -> `courses/${title}/content/`)
-// for (let lang of langs) {
-//   await transcripts(nick, title, lectureIds, lang);
-// }
-
-// await transcripts(nick, title, lectureIds, '영어');
-
-// // * 대본 없는 lectures(execise -> `courses/${title}/content/`)
-// const allLectureIds = findCourseLectureIds(courseId);
-// const lectureIds = findFiles(`_files/courses/${title}/transcript/html/english`).map((name) =>
-//   parseInt(name.split('.')[0])
+// const korean = findFiles(`_files/courses/${title}/transcript/html/korean`).map((x) =>
+//   parseInt(x.split('.')[0])
 // );
-// const execiseIds = allLectureIds.filter((id) => !lectureIds.includes(id));
+// const allLectureIds = findAllLectureIds(courseId);
+const english = findFiles(`_files/courses/${title}/transcript/html/english`).map((x) =>
+  parseInt(x.split('.')[0])
+);
+const content = findFiles(`_files/courses/${title}/content`).map((x) => parseInt(x.split('.')[0]));
 
-// await transcripts(nick, title, execiseIds, '한국');
+// const isTranscipts = _.difference(allLectureIds, content);
+// const missings = _.difference(isTranscipts, english);
+// console.log(allLectureIds.length);
+// console.log(content.length);
+// console.log(isTranscipts.length);
+// console.log(english.length);
+// console.log(missings);
+
+// console.log(_.difference(english, isTranscipts));
+const _lectureIds = _.difference(findAllLectureIds(courseId), english, content, [
+  '7555990',
+  7555990
+]);
+console.log(_lectureIds);
+// const lectureIds = ['29148924'];
+// const lectureIds = _.difference(findCourseLectureIds(courseId), english, korean);
+// const lectureIds = _.difference(findCourseLectureIds(courseId), content);
+// console.log(lectureIds);
+// console.log(findCourseLectureIds(lectureId).length);
+// console.log(korean.length);
+// console.log(english.length);
+// console.log(lectureIds.length);
+
+// await transcripts(nick, title, lectureIds, '한국');
+// await transcripts(nick, title, ['19248060', ...content], '영어');
+await transcripts(nick, title, _lectureIds, '영어');
+// await transcripts(nick, title, findCourseLectureIds(courseId), '영어');
+
+// TODO:
+// 누락 transcripts 재다운로드
 
 // // ? Handout
 // const title = 'complete-web-designer-mobile-designer-zero-to-mastery';
 // // handoutsFromHtml(title);
 // await handouts({ nick, title });
 
-// // web-design-figma-webflow-freelancing/learn/lecture
+// & udemyMarkdown
+// ?
+// console.log(findChaptersByCourseId('2887266'));
+// chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery');
+// chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery', '영어');
 
-// // & udemyHtml
-// console.log(courseListFromCourseList(false));, // Extract CourseList Json From CourseList Html Folder
-// console.log(courseInfoFromCourseDetail(title, false)); // Extract CourseInfo Json From CourseDetail Html File
-// console.log(curriculumFromCourseDetail(title, false)); // Extract Curriculum Json From CourseDetail Html File
-// console.log(curriculumFromCurriculum(title, false)); // Extract Curriculum Json From Curriculum Html File
-// console.log(handoutsFromCurriculum(title, false)); // Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
+// chapterMarkdowns('java-tutorial', '영어');
+// chapterMarkdowns('microservices-with-node-js-and-react', '영어');
 
-// & UdemyData
-// const udemyData = new UdemyData(nick);
-// const data = udemyData.getCourseListHtmls();
-// udemyData.saveCourseListBasic(); // course list 전체 목록 저장(From html/courseList/courseList_{i}.html...)
-// udemyData.saveCourseListDraft(); // draft course 목록 저장
-// udemyData.saveAllCourseInfos(); // 운영중인 강좌(draft course 제외) courseInfo 저장
-
-// console.log(courseTitleByCourseId('24823'));
-// console.log(findActiveCourseTitles());
-
-// ? saveCourseList(All/Active/Draft)
-// saveCourseListActive();
-// saveDraftCourseIds(); // Save Draft CourseIds(Draft(보관함)으로 이동된 강좌)
-// saveCourseTitles(); // Save (active) Course Titles
-// saveCourseListBasic, saveCourseListDraft, saveAllCourseInfos
-
-// const titles = [
-//   'svelte-and-sveltekit',
-//   'visual-paradigm-essential',
-//   'web-design-figma-webflow-freelancing'
-// ];
-// const titles = findActiveCourseTitles();
-// await curriculums(nick, titles);
-
-// ? saveCurriculums
-// await saveCurriculumsByApi(['1832410', '2887266']);
-// await saveAllCurriculumsByApi();
-
-// console.log(findCourseLectureIds('3227583'));
-
-// // & udemyMarkdown
-// // ?
-// // console.log(findChaptersByCourseId('2887266'));
-// // chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery');
-// // chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery', '영어');
-// // chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery', '한국');
+// chapterMarkdowns('complete-web-designer-mobile-designer-zero-to-mastery', '한국');
 // for (let lang of langs) {
 //   chapterMarkdowns(title, lang);
 // }
@@ -347,3 +415,6 @@ const langs = ['한국', '영어'];
 // }
 
 // jsonFromCurriculum(title);
+
+// & udemyPocketbase
+// createCollectionsBySheet();

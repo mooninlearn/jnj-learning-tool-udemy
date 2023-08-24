@@ -15,7 +15,7 @@
  *   - Google API credential
  *
  * References
- *   - [Udemy 제휴사 API 문서(v2.0)](https://www.udemy.com/developers/affiliate/)
+ *   -
  *
  * Authors
  *   - Moon In Learn <mooninlearn@gmail.com>

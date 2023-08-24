@@ -18,7 +18,9 @@
     "_backups/__UdemyWeb.ts",
     "_backups/_UdemyData.ts",
     "_backups/_udemyMarkdown.ts",
-    "_backups/__udemyHtml.ts"
+    "_backups/__udemyHtml.ts",
+    "_backups/_udemyHtml.ts",
+    "_backups/__udemyMarkdown.ts"
   ],
   "exclude": ["node_modules"],
   "ts-node": {

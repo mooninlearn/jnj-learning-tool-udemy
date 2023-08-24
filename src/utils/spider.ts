@@ -84,6 +84,14 @@ const login = async (
   return { page, browser };
 };
 
+// // * Get Url
+// const getUrl = async (page: any) => {
+//   const currentUrl = () => {
+//     return window.location.href;
+//   };
+//   return await page.evaluate(currentUrl);
+// };
+
 // * Browser Accessibility
 const accessibility = async (page: Page, browser: Browser, waitSec: number) => {
   let snapshot = page.accessibility.snapshot();
@@ -102,7 +110,8 @@ const close = async (page: Page, browser: Browser, waitSec: number) => {
 export {
   savePage, // [function] Save (puppeteer) Page Source
   launch, // [function async] lauch (puppeteer) Browser
-  login, //[function async] login (puppeteer) in Browser
+  login, // [function async] login (puppeteer) in Browser
+  // getUrl, // [function async] Get Url
   // accessibility, // [function async] accessibility
   close // [function async] Browser Close
 };

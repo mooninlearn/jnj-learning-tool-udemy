@@ -31,17 +31,20 @@
 // & Import AREA
 // &---------------------------------------------------------------------------
 // ? Builtin Modules
+import fs from 'fs';
 
 // ? External Modules
 import dotenv from 'dotenv';
 
 // ? UserMade Modules
-import { loadJson, saveFile, saveJson, sleep } from 'jnj-lib-base';
+import { includesMulti, loadJson, saveFile, saveJson, moveFile, sleep } from 'jnj-lib-base';
 
 // ? Local Modules
 import {
   UDEMY_WEB_EMAIL, // udemy(web) email
   UDEMY_WEB_PASSWORD, // udemy(web) password
+  DOWNLOAD_EXTS,
+  folder_download, // 다운로드 폴더(PC 계정에 따라 다름)
 
   // ? html
   html_course_list, // (등록)코스 목록
@@ -80,6 +83,7 @@ import {
 import { cheerFromFile } from '../src/utils/cheer';
 
 import { savePage, launch, login } from '../src/utils/spider';
+import { courseIdByCourseTitle } from './udemyData';
 // import { isFalsy, isTruthy, readJson, saveFile, saveJson, savePage, sleep } from './utils/basic';
 
 // & Variable AREA
@@ -97,6 +101,7 @@ const REGISTERED_COURSE_SLUG = '/home/my-courses/learning/?sort=-enroll_time';
 const PURCHASE_HISTORY_LIST_SLUG = '/dashboard/purchase-history/';
 
 const course_detail_slug = (title) => `/course/${title}`;
+
 const curriculum_slug = (title) => {
   let slug = `/course/${title}/learn/lecture`;
   if (/^\d+$/.test(title)) {
@@ -104,7 +109,14 @@ const curriculum_slug = (title) => {
   }
   return slug;
 };
-const lecture_slug = (title, lectureId) => `/course/${title}/learn/lecture/${lectureId}`;
+
+const lecture_slug = (title, lectureId) => {
+  let slug = `/course/${title}/learn/lecture/${lectureId}`;
+  if (/^\d+$/.test(title)) {
+    slug = `/course/draft/${title}/learn/lecture/${lectureId}`;
+  }
+  return slug;
+};
 
 // * Selectors
 // ? Login Page
@@ -114,7 +126,7 @@ const submitSelector = 'button[type="submit"]';
 const waitSelector = 'button[type="submit"]';
 
 // * settings
-const DOWNLOAD_EXTS = ['.pdf', '.zip']; // 강좌 `수업자료` 다운로드 파일 확장자
+// const DOWNLOAD_EXTS = ['.pdf', '.zip']; // 강좌 `수업자료` 다운로드 파일 확장자
 
 // * selectors
 // const INPUT_UDEMY_LOGIN_EMAIL = 'input[name="email"]';
@@ -127,9 +139,23 @@ const DOWNLOAD_EXTS = ['.pdf', '.zip']; // 강좌 `수업자료` 다운로드 �
 // ^ Private Functions
 // ^---------------------------------------------------------------------------
 // * Utils
+// const includesMulti = (s: string, arr: string[]) => {
+//   for (let a of arr) {
+//     if (s.includes(a)) {
+//       return true;
+//     }
+//   }
+//   return false;
+// };
+const renameHandoutTitle = (title) => {
+  return title.replaceAll(' ', '+');
+};
+
 /** udemyUserInfo
  */
 const udemyUserInfo = (nick) => loadJson(`${settingsPath}/Apis/udemy.json`)[nick];
+// const udemyUserInfo = (nick) =>
+//   loadJson(`C:/JnJ-soft/Developments/_Settings/Apis/udemy.json`)[nick];
 
 // * Scrapping
 // *
@@ -179,7 +205,7 @@ const courseDetail = async ({ page, browser, title }) => {
   // ? `강의내용` 버튼 클릭
   const $buttonViewCurriculum = await page.$(buttonViewCurriculum);
   if ($buttonViewCurriculum) {
-    console.log(`###무료강의 '강의내용 Tab' 클릭, ${title}`);
+    // console.log(`###무료강의 '강의내용 Tab' 클릭, ${title}`);
     await page.evaluate((element) => {
       element.click();
     }, $buttonViewCurriculum);
@@ -190,7 +216,7 @@ const courseDetail = async ({ page, browser, title }) => {
   // ? `더 보기` 버튼 클릭
   const $buttonShowMore = await page.$(buttonShowMore);
   if ($buttonShowMore) {
-    console.log(`!!!확장' 클릭 ${title}`);
+    // console.log(`!!!확장' 클릭 ${title}`);
     await page.evaluate((element) => {
       element.click();
     }, $buttonShowMore);
@@ -215,19 +241,22 @@ const curriculum = async ({ page, browser, title, save = true }) => {
   let buttonShowMore = 'button[data-css-toggle-id^="show-more"]'; // <span class="show-more-module--show-more--2bohq">더 보기</span>
   let divCurriculumSection = 'div[data-purpose="curriculum-section-container"]';
 
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(5000);
 
-  // ? 더 보기 버튼 클릭
-  const $buttonShowMore = await page.$(buttonShowMore);
-  if ($buttonShowMore) {
-    await page.evaluate((element) => {
-      element.click();
-    }, $buttonShowMore);
-  }
+  // // ? 더 보기 버튼 클릭
+  // const $buttonShowMore = await page.$(buttonShowMore);
+  // if ($buttonShowMore) {
+  //   await page.evaluate((element) => {
+  //     element.click();
+  //   }, $buttonShowMore);
+  // }
 
   // Section(Chapter)별 확장 버튼 클릭
   let $lectureEls = await page.$$(buttonExpandeds);
-  // console.log(`@@@ 확장버튼 개수: ${$lectureEls.length}`);
+  // console.log(`@@@ 닫힌 버튼 개수: ${$lectureEls.length}`);
+  let $lectureEls_ = await page.$$('h3[class="ud-accordion-panel-heading"]');
+  // console.log(`@@@ 확장 전체 버튼 개수: ${$lectureEls_.length}`);
+
   for (let $lectureEl of $lectureEls) {
     //html handler (solution)
     await page.evaluate((element) => {
@@ -236,10 +265,11 @@ const curriculum = async ({ page, browser, title, save = true }) => {
     // await $lectureEl.click(); // ! at async UdemyWeb.curriculum (file:///C:/JnJ-soft/Projects/internal/jnj_tools/learning-tools/jnj-learning-tools/jnj-learning-tool-udemy/src/UdemyWeb.ts:215:7)
   }
 
+  sleep(3);
   // ? OnceMore 열리지 않은 경우 대비
   $lectureEls = await page.$$(buttonExpandeds);
   if ($lectureEls.length > 0) {
-    console.log(`@@@ 열리지 않았던 확장버튼 개수: ${$lectureEls.length}`);
+    // console.log(`@@@ 열리지 않았던 확장버튼 개수: ${$lectureEls.length}`);
     for (let $lectureEl of $lectureEls) {
       await page.evaluate((element) => {
         element.click();
@@ -252,6 +282,39 @@ const curriculum = async ({ page, browser, title, save = true }) => {
   }
 
   return { page, browser, title };
+};
+
+/** lectureIds
+ * lectureIds From Web(Curriculum Page) For draft course
+ * save to _files/json/curriculum/lectureIds/${courseId}.json
+ */
+const lectureIdsFromWeb = async ({ nick, title }) => {
+  const udemyWeb = new UdemyWeb(nick, curriculum_slug(title));
+  let { page, browser } = await udemyWeb.udemyLogin();
+  sleep(3);
+  await curriculum({ page, browser, title, save: false });
+  sleep(3);
+  // // * lecture click & getUrl -> save
+  // const $lectureEls = await page.$$('li[class^="curriculum-item-link--curriculum"]');
+  const $lectureEls = await page.$$(
+    'div[class^="curriculum-item-link--bottom-row"] > div > button'
+  );
+  // console.log(`$lectureEls.length: ${$lectureEls.length}`);
+  let lectureIds = [];
+  for (let $lectureEl of $lectureEls) {
+    // for (let i = 0; i < $lectureEls.length; i++) {
+    //   let $lectureEl = $lectureEls[i];
+    await $lectureEl.click();
+    sleep(3);
+    // const url = page.evaluate(() => document.location.href);
+    const url = await page.url();
+    lectureIds.push(url.split('#')[0].split('/').slice(-1)[0]);
+  }
+  // console.log(lectureIds);
+  const courseId = courseIdByCourseTitle(title);
+  saveJson(`_files/json/curriculum/lectureIds/${courseId}.json`, lectureIds);
+  browser.close();
+  // return lectureIds;
 };
 
 /** fixTransciptLanguage(대본)
@@ -300,15 +363,6 @@ const fixTransciptLanguage = async ({ page, browser, lang = '한국' }) => {
         await page.waitForTimeout(2000);
       }
     }
-
-    // let $buttonLang = await page.$(`ul[aria-label="자막"] > li > button > div[content^="${lang}"]`);
-    // if ($buttonLang) {
-    //   console.log(`!!!언어 변경 버튼 클릭`);
-    //   await page.evaluate((element) => {
-    //     element.click();
-    //   }, $buttonLang);
-    // }
-    // let $buttonChecked = await page.$(buttonChecked);
   }
 
   return { page, browser };
@@ -347,220 +401,23 @@ const transcript = async ({ page, browser, title, lecture, lang = '한국' }) =>
       await page.$eval(divTranscriptPanel, ($el) => $el.innerHTML)
     );
   } else {
-    // TODO: 내용이 없는 경우 처리
+    // TODO: 대본이 없는 경우 처리
     console.log(`대본 없음, page 내용 저장: ${lecture}.html`);
-    const divConent = `main > div[class^="app--content-column"] > div[class*="app--body-container"]`;
-    await saveFile(
-      // `_files/courses/${title}/content/${lecture}.html`,
-      `${folder_courses_content(title)}/${lecture}.html`,
-      await page.$eval(divConent, ($el) => $el.innerHTML)
-    );
-  }
-};
-
-// ^ Public Functions
-// ^---------------------------------------------------------------------------
-/** courseList
- */
-const courseList = async (nick, save = true) => {
-  const udemyWeb = new UdemyWeb(nick, REGISTERED_COURSE_SLUG);
-  const { page, browser } = await udemyWeb.udemyLogin();
-  const data = await tourByClick({ cbPath: html_course_list, page, browser, save: save });
-  browser.close();
-};
-
-/** courseDetails
- */
-const courseDetails = async (nick, titles) => {
-  // const udemyWeb = new UdemyWeb(nick, `/course/${titles[0]}`);
-  const udemyWeb = new UdemyWeb(nick, course_detail_slug(titles[0]));
-
-  const { page, browser } = await udemyWeb.udemyLogin();
-
-  sleep(3);
-  for (let i = 0; i < titles.length - 1; i++) {
-    await courseDetail({ page, browser, title: titles[i] });
-    sleep(10);
-    // await page.goto(`https://www.udemy.com/course/${titles[i + 1]}`);
-    await page.goto(BASE_URL + course_detail_slug(titles[i + 1]));
-    sleep(3);
-  }
-
-  await courseDetail({ page, browser, title: titles.slice(-1) }); // ? 마지막 요소 처리
-  sleep(3);
-  browser.close();
-};
-
-/** curriculums
- */
-const curriculums = async (nick, titles) => {
-  const udemyWeb = new UdemyWeb(nick, curriculum_slug(titles[0]));
-  // const udemyWeb = new UdemyWeb(nick, `/course/${titles[0]}/learn/lecture/`);
-  let { page, browser } = await udemyWeb.udemyLogin();
-  sleep(3);
-  for (let i = 0; i < titles.length - 1; i++) {
-    let title = titles[i];
-    await curriculum({ page, browser, title });
-    // await page.goto(`https://www.udemy.com/course/${titles[i + 1]}/learn/lecture`);
-    await page.goto(BASE_URL + curriculum_slug(titles[i + 1]));
-    sleep(3);
-  }
-
-  await curriculum({ page, browser, title: titles.slice(-1) }); // ? 마지막 요소 처리
-  sleep(3);
-  browser.close();
-};
-
-// /** curriculums_draft
-//  * TODO: curriculums와 통합(title이 숫자로만 이루어져 있으면(courseId) draft로 자동 설정)
-//  */
-// const curriculums_draft = async (nick, courseIds) => {
-//   const udemyWeb = new UdemyWeb(nick, `/course-dashboard-redirect/?course_id=${courseIds[0]}`);
-//   let { page, browser } = await udemyWeb.udemyLogin();
-//   sleep(3);
-//   for (let i = 0; i < courseIds.length - 1; i++) {
-//     let title = courseIds[i];
-//     await curriculum({ page, browser, title, isDraft: true });
-//     await page.goto(
-//       `https://www.udemy.com/course-dashboard-redirect/?course_id=${courseIds[i + 1]}`
-//     );
-//     sleep(3);
-//   }
-
-//   await curriculum({ page, browser, title: courseIds.slice(-1), isDraft: true }); // ? 마지막 요소 처리
-//   sleep(3);
-//   browser.close();
-// };
-
-/** curriculums_draft
- * TODO: curriculums와 통합(title이 숫자로만 이루어져 있으면(courseId) draft로 자동 설정)
- */
-// const curriculums_draft = async (nick, courseIds) => {
-//   // const udemyWeb = new UdemyWeb(nick, `/course-dashboard-redirect/?course_id=${courseIds[0]}`);
-//   const udemyWeb = new UdemyWeb(nick, curriculum_draft_slug(courseIds[0]));
-//   let { page, browser } = await udemyWeb.udemyLogin();
-//   sleep(3);
-//   await page.goto(`https://www.udemy.com/course-dashboard-redirect/?course_id=${courseIds[0]}`);
-//   await page.goto(curriculum_draft_slug(courseIds[0]));
-//   await curriculum({ page, browser, title: courseIds[0], isDraft: true });
-//   sleep(3);
-//   browser.close();
-// };
-
-/** transcripts
- *   TODO: draft course 추가(lectureId 구하는 방법은?)
- */
-const transcripts = async (nick, title, lectureIds, lang = '한국') => {
-  // const udemyWeb = new UdemyWeb(nick, `/course/${title}/learn/lecture/${lectures[0]}`);
-  const udemyWeb = new UdemyWeb(nick, lecture_slug(title, lectureIds[0]));
-  let { page, browser } = await udemyWeb.udemyLogin();
-  sleep(3);
-  for (let i = 0; i < lectureIds.length - 1; i++) {
-    await transcript({ page, browser, title, lecture: lectureIds[i], lang });
-    // await page.goto(`https://www.udemy.com/course/${title}/learn/lecture/${lectureIds[i + 1]}`);
-    await page.goto(BASE_URL + lecture_slug(title, lectureIds[i + 1]));
-    sleep(3);
-  }
-
-  // https://www.udemy.com/course/33151698/learn/lecture/33151702
-  await transcript({ page, browser, title, lecture: lectureIds.slice(-1), lang }); // ? 마지막 요소 처리
-  sleep(3);
-  browser.close();
-};
-
-/** handouts(수업자료)
- * Download Handouts (DOWNLOAD_EXTS=zip,pdf)
- *   TODO: download 폴더에 있는 수업자료 -> handouts 폴더(`_files/courses/${title}/handouts/`)로 이동
- *   TODO: draft course 추가
- */
-const handouts = async ({ nick, title }) => {
-  const handouts = loadJson(file_courses_handoutList(title));
-  if (!handouts) {
-    console.log('handoutList가 없습니다.', file_courses_handoutList(title));
-    return null; // handoutList 파일이 없으면 종료
-  }
-  console.log(handouts); // TODO: 테스트 후 삭제
-
-  // const udemyWeb = new UdemyWeb(nick, `/course/${title}/learn/lecture/`);
-  const udemyWeb = new UdemyWeb(nick, curriculum_slug(title));
-  let { page, browser } = await udemyWeb.udemyLogin();
-  sleep(3);
-
-  await curriculum({ page, browser, title, save: false });
-
-  // ? click 강의 내용 리스트 확장 버튼
-  let buttonHandoutExpand =
-    'div[data-purpose="curriculum-section-container"] div[class^="popper-module"] > button[aria-expanded="false"]';
-  let buttonHandout =
-    'div[data-purpose="curriculum-section-container"] div[class*="ud-popper-open"] ul > li > button';
-
-  let buttonTranscriptToggle = 'button[data-purpose="transcript-toggle"]';
-  let divTranscriptPanel = 'div[data-purpose="transcript-panel"]';
-
-  const downHandoutNums = await handouts.filter((h) => h.type == 'file').map((h) => h.count); // ^ type = 'file'인 handout 번호(강좌별 `자료` 일련번호, 첫번째: 0)
-  console.log(`---downHandoutNums: ${downHandoutNums}`);
-
-  // ? 자료(handouts)
-  // Lecture별 자료(handouts) 확장 버튼 클릭
-  // await page.waitForSelector(buttonTranscriptToggle, { timeout: 30000 });
-  sleep(3);
-  const $handoutExEls = await page.$$(buttonHandoutExpand);
-  console.log(`## $handoutExEls.length:  ${$handoutExEls.length}`);
-
-  for (let i = 0; i < $handoutExEls.length; i++) {
-    // for (let $handoutExEl of $handoutExEls) {
-    let $handoutExEl = $handoutExEls[i];
-    if (!downHandoutNums.includes(i)) {
-      console.log(`${i}번째 자료 버튼: ~~type = 'file'이 없는 자료`);
-      continue; // ^ type = 'file'이 없는 `자료`이면 continue
-    }
-    await $handoutExEl.click();
-    console.log(`@@ $handoutExEl click`);
-    // Lecture별 자료(handouts) 버튼 클릭
-    await page.waitForTimeout(3000);
-
-    // https://stackoverflow.com/questions/75585822/getting-text-inside-of-an-element-from-the-class-name-using-puppeteer
-    const handoutTexts = await page.$$eval(buttonHandout, (els) => els.map((e) => e.textContent));
-    console.log(`XXX handoutTexts len: ${handoutTexts.length}`);
-
-    // const DOWNLOAD_EXTS = ['.pdf', '.zip'];
-    let downloadables = [];
-
-    for (let i = 0; i < handoutTexts.length; i++) {
-      let text = handoutTexts[i];
-      console.log(`^^^^^handoutText: |${text}|`);
-      for (let ext of DOWNLOAD_EXTS) {
-        if (text.slice(-4) == ext) {
-          console.log(`^^^ downloadable file: ${text}`);
-          downloadables.push(i);
-          break;
-        }
-      }
-    }
-    let $handoutEls = await page.$$(buttonHandout);
-
-    console.log(`#### $handoutEls.length:  ${$handoutEls.length}`);
-    for (let i = 0; i < $handoutEls.length; i++) {
-      if (!downloadables.includes(i)) continue; // ^ DOWNLOAD_EXTS가 아닌 경우 클릭하지 않음(링크 버튼 등 제외)
-      try {
-        await $handoutEls[i].click(); // ? `수업자료` 클릭
-      } catch (e) {
-        console.log(`Error: Node is either not clickable or not an HTMLElement`);
-      }
-      await page.waitForTimeout(5000);
+    // const divConent = `main > div[class^="app--content-column"] > div[class*="app--body-container"]`;
+    const divConent = `main section[class^="lecture-view--container"] > div > div`;
+    try {
+      let content = await page.$eval(divConent, ($el) => $el.innerHTML);
+      await saveFile(
+        // `_files/courses/${title}/content/${lecture}.html`,
+        `${folder_courses_content(title)}/${lecture}.html`,
+        content
+      );
+    } catch {
+      console.log(
+        'failed to find element matching selector "main section[class^="lecture-view--container"] > div > div"'
+      );
     }
   }
-
-  browser.close();
-};
-
-/** purchaseHistory
- */
-const purchaseHistory = async (nick, save = true) => {
-  const udemyWeb = new UdemyWeb(nick, PURCHASE_HISTORY_LIST_SLUG);
-  const { page, browser } = await udemyWeb.udemyLogin();
-  const data = await tourByClick({ cbPath: html_purchase_history, page, browser, save: save });
-  browser.close();
 };
 
 // & Class AREA
@@ -622,6 +479,248 @@ class UdemyWeb {
   }
 }
 
+// ^ Public Functions
+// ^---------------------------------------------------------------------------
+// ^ Public Functions
+// ^---------------------------------------------------------------------------
+/** courseList
+ */
+const courseList = async (nick, save = true) => {
+  const udemyWeb = new UdemyWeb(nick, REGISTERED_COURSE_SLUG);
+  const { page, browser } = await udemyWeb.udemyLogin();
+  const data = await tourByClick({ cbPath: html_course_list, page, browser, save: save });
+  browser.close();
+};
+
+/** courseDetails
+ */
+const courseDetails = async (nick, titles) => {
+  // const udemyWeb = new UdemyWeb(nick, `/course/${titles[0]}`);
+  const udemyWeb = new UdemyWeb(nick, course_detail_slug(titles[0]));
+
+  const { page, browser } = await udemyWeb.udemyLogin();
+
+  sleep(3);
+  for (let i = 0; i < titles.length - 1; i++) {
+    await courseDetail({ page, browser, title: titles[i] });
+    sleep(10);
+    // await page.goto(`https://www.udemy.com/course/${titles[i + 1]}`);
+    await page.goto(BASE_URL + course_detail_slug(titles[i + 1]));
+    sleep(3);
+  }
+
+  await courseDetail({ page, browser, title: titles.slice(-1) }); // ? 마지막 요소 처리
+  sleep(3);
+  browser.close();
+};
+
+/** curriculums
+ */
+const curriculums = async (nick, titles) => {
+  const udemyWeb = new UdemyWeb(nick, curriculum_slug(titles[0]));
+  // const udemyWeb = new UdemyWeb(nick, `/course/${titles[0]}/learn/lecture/`);
+  let { page, browser } = await udemyWeb.udemyLogin();
+  sleep(3);
+  for (let i = 0; i < titles.length - 1; i++) {
+    let title = titles[i];
+    await curriculum({ page, browser, title });
+    // await page.goto(`https://www.udemy.com/course/${titles[i + 1]}/learn/lecture`);
+    await page.goto(BASE_URL + curriculum_slug(titles[i + 1]));
+    sleep(3);
+  }
+
+  await curriculum({ page, browser, title: titles.slice(-1) }); // ? 마지막 요소 처리
+  sleep(3);
+  browser.close();
+};
+
+/** lectureIds
+ *
+ */
+const lectureIds = async (nick, titles) => {
+  for (let i = 0; i < titles.length - 1; i++) {
+    let title = titles[i];
+    await lectureIdsFromWeb({ nick, title });
+    sleep(5);
+  }
+};
+
+/** transcripts
+ *   TODO: draft course 추가(lectureId 구하는 방법은?)
+ */
+const transcripts = async (nick, title, lectureIds, lang = '한국') => {
+  console.log(lecture_slug(title, lectureIds[0]));
+  const udemyWeb = new UdemyWeb(nick, lecture_slug(title, lectureIds[0]));
+  let { page, browser } = await udemyWeb.udemyLogin();
+  sleep(3);
+  for (let i = 0; i < lectureIds.length - 1; i++) {
+    await transcript({ page, browser, title, lecture: lectureIds[i], lang });
+    await page.goto(BASE_URL + lecture_slug(title, lectureIds[i + 1]));
+    sleep(3);
+  }
+
+  await transcript({ page, browser, title, lecture: lectureIds.slice(-1), lang }); // ? 마지막 요소 처리
+  sleep(3);
+  browser.close();
+};
+
+/** handouts(수업자료)
+ * Download Handouts (DOWNLOAD_EXTS=zip,pdf)
+ *   TODO: download 폴더에 있는 수업자료 -> handouts 폴더(`_files/courses/${title}/handouts/`)로 이동
+ *   TODO: draft course 추가
+ */
+const handouts = async ({ nick, title }) => {
+  const handouts = loadJson(file_courses_handoutList(title));
+  fs.mkdirSync(folder_courses_handouts(title), { recursive: true }); // 저장 폴더 생성
+
+  if (!handouts) {
+    console.log('handoutList가 없습니다.', file_courses_handoutList(title));
+    return null; // handoutList 파일이 없으면 종료
+  }
+  // console.log(handouts); // TODO: 테스트 후 삭제
+
+  // const udemyWeb = new UdemyWeb(nick, `/course/${title}/learn/lecture/`);
+  const udemyWeb = new UdemyWeb(nick, curriculum_slug(title));
+  let { page, browser } = await udemyWeb.udemyLogin();
+  sleep(5);
+
+  await curriculum({ page, browser, title, save: false });
+  sleep(5);
+
+  // ? click 강의 내용 리스트 확장 버튼
+  let buttonHandoutExpand =
+    'div[data-purpose="curriculum-section-container"] div[class^="popper-module"] > button[aria-expanded="false"]';
+  let buttonHandout =
+    'div[data-purpose="curriculum-section-container"] div[class*="ud-popper-open"] ul > li > button';
+
+  let buttonTranscriptToggle = 'button[data-purpose="transcript-toggle"]';
+  let divTranscriptPanel = 'div[data-purpose="transcript-panel"]';
+
+  // ? 자료(handouts)
+  // Lecture별 자료(handouts) 확장 버튼 클릭
+  sleep(3);
+  const $handoutExEls = await page.$$(buttonHandoutExpand);
+  console.log(`## 자료버튼 개수 $handoutExEls.length:  ${$handoutExEls.length}`);
+
+  let num = 0; // 다운로드 파일 일련번호
+  let retry = 60; // 다운로드 확인 재시도 횟수
+  for (let i = 0; i < $handoutExEls.length; i++) {
+    // for (let $handoutExEl of $handoutExEls) {
+    let $handoutExEl = $handoutExEls[i];
+
+    await $handoutExEl.click();
+    // console.log(`@@ $handoutExEl click`);
+    // Lecture별 자료(handouts) 버튼 클릭
+    // await page.waitForTimeout(5000);
+    sleep(5);
+
+    // https://stackoverflow.com/questions/75585822/getting-text-inside-of-an-element-from-the-class-name-using-puppeteer
+    const handoutTexts = await page.$$eval(buttonHandout, (els) => els.map((e) => e.textContent));
+    console.log(handoutTexts);
+
+    let $handoutEls = await page.$$(buttonHandout);
+
+    // console.log(
+    //   `#### handoutTexts.length: ${handoutTexts.length}, $handoutEls.length:  ${$handoutEls.length}`
+    // );
+    // TODO: '자료' 버튼 클릭 -> 팝업 창 내 파일 클릭 => '자료' 버튼 클릭
+    // let clickCount = 0;
+    for (let i = 0; i < $handoutEls.length; i++) {
+      let handoutTitle = handoutTexts[i];
+      // TODO: 이름이 같은 경우는?(num == handout.count)
+      let handout = handouts.find((handout) => handout.title == handoutTitle) || {
+        title: handoutTexts[i],
+        lecture: ''
+      };
+
+      // if (
+      //   !handoutTitle.slice(-5).includes('.') ||
+      //   handoutTitle.includes('/') ||
+      //   handoutTitle.endsWith('.com') ||
+      //   handoutTitle.endsWith('.net') ||
+      //   handoutTitle.endsWith('.org') ||
+      //   handoutTitle.endsWith('.io')
+      // ) {
+      if (handout.type != 'file') {
+        // ? 'file'이 아닌 경우
+        if (i < $handoutEls.length - 1) {
+          // 마지막 handout이면 열린 창을 닫기 위해 '자료' 버튼 클릭
+          await $handoutExEl.click(); // ^ '자료' 재클릭
+        }
+        sleep(1);
+        continue;
+      }
+
+      try {
+        await $handoutEls[i].click(); // ? `수업자료` 클릭
+        console.log(`+++++++++Click ${handoutTitle}`);
+      } catch (e) {
+        console.log(`Error: Node is either not clickable or not an HTMLElement`);
+        continue;
+      }
+
+      // console.log(`^^^^^handoutTexts[${i}]: |${handoutTexts[i]}|`);
+      num += 1;
+      // let sn = num.toString().padStart(3, '0');  // TODO: 테스트 후 삭제
+      let sn = handout.count.toString().padStart(3, '0');
+      // console.log(`${folder_download}/${handout.title}`);
+
+      // ? download file
+      let done = false;
+      let handout_title = renameHandoutTitle(handout.title);
+      console.log(`handoutTexts[i]: ${handoutTexts[i]}, handout_title: ${handout_title}`);
+      let srcFilePath = `${folder_download}/${handout_title}`;
+      // TODO: handout.lecture file이름에 사용할 수 없는 문자열 치환 `19. Invoking the "Generate New Wallet" Resource from the UI` =>
+      let dstFilePath = `${folder_courses_handouts(title)}/${sn}_${handout.lecture
+        .split(' ')[0]
+        .replace('.', ' ')}_${handout_title}`;
+      for (let t = 0; t < retry; t++) {
+        if (fs.existsSync(srcFilePath)) {
+          console.log(`@@@@@@@@@@@@@retry: ${t} downloaded`);
+          done = true;
+          break;
+        }
+        sleep(1);
+      }
+
+      // ? move file
+      if (done) {
+        fs.renameSync(srcFilePath, dstFilePath);
+      } else {
+        continue;
+      }
+
+      let done2 = false;
+      for (let t = 0; t < retry; t++) {
+        if (fs.existsSync(dstFilePath)) {
+          console.log(`#######retry: ${t} complete move`);
+          done = true;
+          if (i < $handoutEls.length - 1) {
+            // 마지막 handout이면 클릭하지 않음
+            await $handoutExEl.click(); // ^ '자료' 재클릭
+          }
+          sleep(1);
+          break;
+        }
+        sleep(1);
+      }
+      // await page.waitForTimeout(5000);
+      sleep(1);
+    }
+  }
+
+  browser.close();
+};
+
+/** purchaseHistory
+ */
+const purchaseHistory = async (nick, save = true) => {
+  const udemyWeb = new UdemyWeb(nick, PURCHASE_HISTORY_LIST_SLUG);
+  const { page, browser } = await udemyWeb.udemyLogin();
+  const data = await tourByClick({ cbPath: html_purchase_history, page, browser, save: save });
+  browser.close();
+};
+
 // & Export AREA
 // &---------------------------------------------------------------------------
 export {
@@ -629,6 +728,8 @@ export {
   courseList, // [function async] fetch & save course list 수강중인 강좌 목록
   courseDetails, // [function async] fetch & save course detail 강좌 상세페이지
   curriculums, // [function async] fetch & save course lectures 강좌 강의실 페이지
+  // lectureIdsFromWeb, //  [function async] fetch & save course lectureIds 강좌 강의실 페이지
+  lectureIds, //  [function async] fetch & save course lectureIds 강좌 강의실 페이지
   // curriculums_draft, // TODO: curriculums와 통합후 삭제, [function async] draft 강좌 강의실 페이지
   transcripts, // [function async] fetch & save course lectures 강의 대본(강의실 페이지)
   handouts, // [function async] Download Handouts (DOWNLOAD_EXTS=zip,pdf)

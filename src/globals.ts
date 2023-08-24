@@ -43,7 +43,9 @@ const UDEMY_WEB_EMAIL = process.env.UDEMY_WEB_EMAIL;
 const UDEMY_WEB_PASSWORD = process.env.UDEMY_WEB_PASSWORD;
 
 // * Settings
-const DOWNLOAD_EXTS = ['.pdf', '.zip']; // 강좌 `수업자료` 다운로드 파일 확장자
+// TODO: 확장자가 아니라, 문자열 뒤 6개 문자를 자른 후 '.'이 있는가로 확인?
+const DOWNLOAD_EXTS = ['.pdf', '.zip', '.pptx', 'ppt', '.docx', '.doc', '.xlsx', '.png', '.obj']; // 강좌 `수업자료` 다운로드 파일 확장자
+const folder_download = 'C:/Users/Jungsam/Downloads'; // 다운로드 폴더(PC 계정에 따라 다름)
 
 // * Paths(파일 경로 상수)
 // ? folder(html)
@@ -56,7 +58,15 @@ const json_list_courses_active = `_files/json/list/courses_active.json`; // (활
 const json_list_courseIds_draft = `_files/json/list/courseIds_draft.json`; // (draft)코스 아이디 배열
 const json_list_courses_map = `_files/json/list/courses_map.json`; // (활성) 코스 map {<courseId>: <title>, ...}
 const json_list_courseTitles_active = `_files/json/list/courseTitles_active.json`; // (활성)코스 제목(kebab-case) 배열
+const json_list_instructor_infos = `_files/json/list/instructor_infos.json`; // 강사 정보 목록
 const json_list_purchase_history = `_files/json/list/purchase_history.json`; // 구매 이력
+
+// * Paths(Google Drive/Sheets)
+// ? Folder
+const google_folderId_udemy_root = '1eDsWHdnSsgW2d5zIa69e2GprYBKrpE0k'; // # mooninlearn@gmail.com `My Drive/Udemy`: https://drive.google.com/drive/folders/1eDsWHdnSsgW2d5zIa69e2GprYBKrpE0k
+
+// ? File
+const google_spreadsheetId_udemy_courses = '1qFznArW_B3IQdAmp2d2poRnCvAy5tBw37P0cTvex9kI'; //# `My Drive/Udemy/Courses`: https://docs.google.com/spreadsheets/d/1qFznArW_B3IQdAmp2d2poRnCvAy5tBw37P0cTvex9kI/
 
 // & Function AREA
 // &---------------------------------------------------------------------------
@@ -78,7 +88,10 @@ const json_course_info_mix = (courseId) => `_files/json/courseInfo/mix/${courseI
 const json_curriculum_api = (courseId) => `_files/json/curriculum/api/${courseId}.json`; // curriculum(from api)
 const json_curriculum_web = (courseId) => `_files/json/curriculum/web/${courseId}.json`; // curriculum(from web(courseDetail))
 const json_curriculum_web2 = (courseId) => `_files/json/curriculum/web2/${courseId}.json`; // curriculum(from web(curriculum))
+const json_curriculum_lectureIds = (courseId) =>
+  `_files/json/curriculum/lectureIds/${courseId}.json`; // curriculum lectureIds(draft course, from web(curriculum))
 const json_curriculum_mix = (courseId) => `_files/json/curriculum/mix/${courseId}.json`; // curriculum(api + web)
+const json_curriculum_lectures = (courseId) => `_files/json/curriculum/lectures/${courseId}.json`; // curriculum lectrue(active + draft)
 
 // ? folder/file(course)
 const folder_courses_transcript = (title, lang) =>
@@ -102,6 +115,7 @@ export {
 
   // ? settings
   DOWNLOAD_EXTS, // 강좌 `수업자료` 다운로드 파일 확장자
+  folder_download, // 다운로드 폴더(PC 계정에 따라 다름)
 
   // ? folder(html)
   folder_html_course_list, // courseList Html Folder
@@ -119,6 +133,7 @@ export {
   json_list_courseIds_draft, // (draft)코스 아이디 배열
   json_list_courses_map, // (활성) 코스 map {<courseId>: <title>, ...}
   json_list_courseTitles_active, // (활성)코스 제목(kebab-case) 배열
+  json_list_instructor_infos, // 강사 정보 목록
   json_list_purchase_history, // 구매 이력
 
   // ? json(courseInfo)
@@ -131,7 +146,9 @@ export {
   json_curriculum_api, // curriculum(from api)
   json_curriculum_web, // curriculum(from web(courseDetail))
   json_curriculum_web2, // curriculum(from web(curriculum))
+  json_curriculum_lectureIds, // curriculum lectureIds(draft course, from web(curriculum))
   json_curriculum_mix, // curriculum(api + web)
+  json_curriculum_lectures, // curriculum lectrue(active + draft)
 
   // ? folder(course)
   folder_courses_transcript, // transcript(자막, lang:(english|korean), web)

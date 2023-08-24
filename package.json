@@ -17,16 +17,30 @@
     "typescript": "^5.0.4"
   },
   "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
     "@octokit/rest": "^20.0.1",
+    "@types/google-apps-script": "^1.0.66",
     "axios": "^1.4.0",
     "cheerio": "^1.0.0-rc.12",
+    "csv": "^6.3.1",
     "dotenv": "^16.3.1",
-    "jnj-lib-base": "^0.0.9",
+    "googleapis": "^105.0.0",
+    "ini": "^4.1.1",
+    "jnj-lib-base": "^0.0.23",
+    "jnj-lib-db": "^0.1.21",
+    "jnj-lib-doc": "^0.0.4",
+    "jnj-lib-google": "^0.0.4",
+    "js-yaml": "^4.1.0",
+    "lodash": "^4.17.21",
     "marked": "^7.0.2",
+    "mysql": "^2.18.1",
+    "pocketbase": "^0.16.0",
     "puppeteer": "^20.3.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "turndown": "^7.1.2"
+    "sqlite3": "^5.1.6",
+    "turndown": "^7.1.2",
+    "xlsx": "^0.18.5"
   },
   "type": "module"
 }

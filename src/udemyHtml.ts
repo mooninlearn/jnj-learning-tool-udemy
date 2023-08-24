@@ -27,7 +27,7 @@
 // ? External Modules
 
 // ? UserMade Modules
-import { loadJson, saveFile, saveJson, findFiles, sleep } from 'jnj-lib-base';
+import { includesMulti, loadJson, saveFile, saveJson, findFiles, sleep } from 'jnj-lib-base';
 
 // ? Local Modules
 import {
@@ -139,7 +139,7 @@ const courseListFromCourseList = (save = true) => {
         target: 'src'
       },
       {
-        key: 'Iinstructors',
+        key: 'instructors',
         selector: 'div[class="ud-text-xs"] > div[class^="course-card-instructors"]',
         target: 'text'
       },
@@ -170,7 +170,7 @@ const courseListFromCourseList = (save = true) => {
 
 /** courseInfoFromCourseDetail
  *  Extract CourseInfo Json From CourseDetail Html File
- * NOTE:
+ * @note
  */
 const courseInfoFromCourseDetail = (title, save = true) => {
   // let $ = cheerFromFile(`_files/html/courseDetail/${title}.html`);
@@ -228,7 +228,7 @@ const courseInfoFromCourseDetail = (title, save = true) => {
 
 /** curriculumFromCourseDetail
  *  Extract Curriculum Json From CourseDetail Html File
- * NOTE:
+ * @note
  */
 const curriculumFromCourseDetail = (title, save = true) => {
   // let $ = cheerFromFile(`_files/html/courseDetail/${title}.html`);
@@ -302,7 +302,7 @@ const curriculumFromCourseDetail = (title, save = true) => {
 
 /** curriculumFromCurriculum
  * Extract Curriculum Json From Curriculum Html File
- * NOTE:
+ * @note
  */
 const curriculumFromCurriculum = (title, save = true) => {
   // console.log('jsonFromCurriculum');
@@ -313,7 +313,7 @@ const curriculumFromCurriculum = (title, save = true) => {
   //   .slice(-1)[0]; // ERROR가 있는 경우 있음
   // console.log(`courseId: ${courseId}`);
   let courseId = courseIdByCourseTitle(title); // TODO: import로 할 것인지 확인
-  console.log(`@@@@@@@@@@@@@@@@@@@courseId in curriculumFromCurriculum: ${courseId}`);
+  // console.log(`@@@@@@@@@@@@@@@@@@@courseId in curriculumFromCurriculum: ${courseId}`);
 
   let $roots = $(
     'div[data-purpose="curriculum-section-container"] div[data-purpose^="section-panel-"]'
@@ -356,8 +356,8 @@ const curriculumFromCurriculum = (title, save = true) => {
   }
 
   if (save) {
-    console.log(curriculum);
-    console.log(json_curriculum_web2(courseId));
+    // console.log(curriculum);
+    // console.log(json_curriculum_web2(courseId));
     saveJson(json_curriculum_web2(courseId), curriculum);
   }
 
@@ -367,7 +367,7 @@ const curriculumFromCurriculum = (title, save = true) => {
 /** handoutsFromHtml
  * Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
  */
-const handoutsFromCurriculum = (title, save = true) => {
+const handoutListFromCurriculum = (title, save = true) => {
   // const path = `_files/html/curriculum/${title}.html`;
   const path = html_curriculum(title);
   // let sections: any = {};
@@ -386,27 +386,54 @@ const handoutsFromCurriculum = (title, save = true) => {
       let lectureTitle = $lecture.find('span[data-purpose="item-title"]').text(); // 강의 제목
 
       let $handouts = $lecture.find('div[id^="popper-content"]');
-      if ($handouts.length > 0) count += 1; // handout이 있으면 count 증가
+      // if ($handouts.length > 0) count += 1; // handout이 있으면 count 증가
+
       for (let k = 0; k < $handouts.length; k++) {
         let $handout = $handouts.eq(k);
-        let handoutTitle = $handout.find('ul > li > button > div').text(); // 자료 제목
-        if (DOWNLOAD_EXTS.includes(handoutTitle.slice(-4))) {
-          handouts.push({
+        let $handouts_ = $handout.find('ul > li > button > div');
+        for (let l = 0; l < $handouts_.length; l++) {
+          count += 1; // $ 카운트 증가
+          let $handout_ = $handouts_.eq(l);
+          let handoutTitle = $handout_.text(); // 자료 제목
+          let handout_ = {
             count: count,
-            type: 'file',
+            type: 'link',
             title: handoutTitle,
             section: sectionTitle,
             lecture: lectureTitle
-          }); // ^ handouts에 추가
-          continue;
+          };
+          // if (
+          //   handoutTitle.startsWith('http') ||
+          //   handoutTitle.endsWith('/') ||
+          //   handoutTitle.endsWith('.com') ||
+          //   handoutTitle.endsWith('.net') ||
+          //   handoutTitle.endsWith('.org') ||
+          //   handoutTitle.endsWith('.io')
+          // ) {
+          if (
+            handoutTitle.includes('/') ||
+            handoutTitle.endsWith('.com') ||
+            handoutTitle.endsWith('.net') ||
+            handoutTitle.endsWith('.org') ||
+            handoutTitle.endsWith('.dev') ||
+            handoutTitle.endsWith('.io')
+          ) {
+            // ? 'http'로 시작하는 것
+            handout_.type = 'http';
+            handouts.push(handout_); // ^ handouts에 추가
+          } else if (
+            handoutTitle.slice(-5).includes('.') &&
+            !handoutTitle.endsWith('.') &&
+            !handoutTitle.endsWith('!') &&
+            !handoutTitle.endsWith('?')
+          ) {
+            // ? title 마지막 5글자 내에 '.'가 있고, '.'로 끝나지 않는 것
+            handout_.type = 'file';
+            handouts.push(handout_); // ^ handouts에 추가
+          } else {
+            handouts.push(handout_); // ^ handouts에 추가
+          }
         }
-        handouts.push({
-          count: count,
-          type: 'link',
-          title: handoutTitle,
-          section: sectionTitle,
-          lecture: lectureTitle
-        }); // ^ handouts에 추가
       }
     }
   }
@@ -459,7 +486,7 @@ export {
   courseInfoFromCourseDetail, // Extract CourseInfo Json From CourseDetail Html File
   curriculumFromCourseDetail, // Extract Curriculum Json From CourseDetail Html File
   curriculumFromCurriculum, // Extract Curriculum Json From Curriculum Html File
-  handoutsFromCurriculum, // Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
+  handoutListFromCurriculum, // Extract Handouts(수업자료) Json From Curriculum Html File(`_files/html/curriculum/${title}.html`)
 
   // ? purchase
   purchaseHistoryFromPurchaseHistory // 구매 이력
